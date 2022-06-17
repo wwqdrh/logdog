@@ -44,4 +44,4 @@ logdog就能在fluentd里直接查看当前所有微服务链路中的日志
 
 在对应的log.txt新建日志记录查看效果
 
-![示例图片](./assets/1.png)
+![示例图片](./docs/1.png)
