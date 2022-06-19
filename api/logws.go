@@ -3,9 +3,14 @@ package api
 import (
 	"fmt"
 	"log"
+	"net/http"
+	"os"
+	"path"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"github.com/wwqdrh/logger"
 )
 
 var (
@@ -27,13 +32,41 @@ const (
 	maxMessageSize = 512
 )
 
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
+}
+
+func logData(ctx *gin.Context) {
+	ws, err := upgrader.Upgrade(ctx.Writer, ctx.Request, ctx.Writer.Header())
+	if err != nil {
+		ctx.String(500, "upgrade error")
+		return
+	}
+
+	// check log is exist?
+	file := path.Join(Tracing.LogDir, ctx.Query("file"))
+	if _, err := os.Stat(file); os.IsNotExist(err) {
+		ws.WriteMessage(websocket.TextMessage, []byte("log error: 日志文件不存在"))
+		if e := ws.Close(); e != nil {
+			logger.DefaultLogger.Error(e.Error())
+		}
+		return
+	}
+
+	close := make(chan bool)
+	go WsRead(ws, close)
+	go WsWrite(ws, Tracing.TailLog(file, close), close)
+}
+
 // websocket read healper func
 func WsRead(conn *websocket.Conn, done chan bool) {
 	defer func() {
 		conn.Close()
 		select {
 		case _, ok := <-done:
-			if !ok {
+			if ok {
 				close(done)
 			}
 		default:
@@ -61,7 +94,7 @@ func WsWrite(conn *websocket.Conn, send chan string, done chan bool) {
 		ticker.Stop()
 		select {
 		case _, ok := <-done:
-			if !ok {
+			if ok {
 				close(done)
 			}
 		default:
